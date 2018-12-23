@@ -13,9 +13,6 @@ import de.gurkenlabs.litiengine.entities.IMobileEntity;
 import de.gurkenlabs.litiengine.entities.Prop;
 import de.gurkenlabs.litiengine.util.geom.GeometricUtilities;
 
-/**
- * The Class PhysicsEngine.
- */
 public final class PhysicsEngine implements IPhysicsEngine {
   private final List<ICollisionEntity> collisionEntities;
 
@@ -29,9 +26,6 @@ public final class PhysicsEngine implements IPhysicsEngine {
   private final List<Rectangle2D> allCollisionBoxRectangles;
   private final List<Rectangle2D> entityCollisionBoxesRectangles;
 
-  /**
-   * Instantiates a new physics engine.
-   */
   public PhysicsEngine() {
     this.entityCollisionBoxes = new CopyOnWriteArrayList<>();
     this.collisionEntities = new CopyOnWriteArrayList<>();
@@ -161,11 +155,21 @@ public final class PhysicsEngine implements IPhysicsEngine {
 
   @Override
   public boolean collides(final Rectangle2D rect, final CollisionType collisionType) {
+    return collides(rect, null, collisionType);
+  }
+
+  @Override
+  public boolean collides(Rectangle2D rect, ICollisionEntity collisionEntity) {
+    return this.collides(rect, collisionEntity, CollisionType.ALL);
+  }
+
+  @Override
+  public boolean collides(Rectangle2D rect, ICollisionEntity collisionEntity, CollisionType collisionType) {
     switch (collisionType) {
     case ALL:
       return this.collides(rect);
     case ENTITY:
-      return this.collidesWithAnyEntity(null, rect) != null;
+      return this.collidesWithAnyEntity(collisionEntity, rect) != null;
     case STATIC:
       return this.collidesWithAnyStaticCollisionBox(rect) != null;
     default:
@@ -508,7 +512,7 @@ public final class PhysicsEngine implements IPhysicsEngine {
    */
   private Point2D resolveCollision(final IMobileEntity entity, final Point2D newPosition) {
     // first resolve x-axis movement
-    Point2D resolvedPosition = new Point2D.Double(newPosition.getX(), entity.getLocation().getY());
+    Point2D resolvedPosition = new Point2D.Double(newPosition.getX(), entity.getY());
 
     // resolve static collision boxes first
     final Rectangle2D intersectionX = this.collidesWithAnything(entity, entity.getCollisionBox(resolvedPosition));
@@ -517,10 +521,10 @@ public final class PhysicsEngine implements IPhysicsEngine {
         resolvedPosition = this.findLocationWithoutCollision(entity, resolvedPosition);
       } else if (entity.getCollisionBox().getX() < intersectionX.getMaxX()) {
         // new position is closer to the left side, so push out to the left
-        resolvedPosition.setLocation(Math.max(entity.getLocation().getX(), resolvedPosition.getX() - intersectionX.getWidth()), resolvedPosition.getY());
+        resolvedPosition.setLocation(Math.max(entity.getX(), resolvedPosition.getX() - intersectionX.getWidth()), resolvedPosition.getY());
       } else {
         // push it out to the right
-        resolvedPosition.setLocation(Math.min(entity.getLocation().getX(), resolvedPosition.getX() + intersectionX.getWidth()), resolvedPosition.getY());
+        resolvedPosition.setLocation(Math.min(entity.getX(), resolvedPosition.getX() + intersectionX.getWidth()), resolvedPosition.getY());
       }
     }
 
@@ -533,9 +537,9 @@ public final class PhysicsEngine implements IPhysicsEngine {
         resolvedPosition = this.findLocationWithoutCollision(entity, resolvedPosition);
       } else if (entity.getCollisionBox().getCenterY() - intersectionY.getCenterY() < 0) {
         // new position is closer to the top
-        resolvedPosition.setLocation(resolvedPosition.getX(), Math.max(entity.getLocation().getY(), resolvedPosition.getY() - intersectionY.getHeight()));
+        resolvedPosition.setLocation(resolvedPosition.getX(), Math.max(entity.getY(), resolvedPosition.getY() - intersectionY.getHeight()));
       } else {
-        resolvedPosition.setLocation(resolvedPosition.getX(), Math.min(entity.getLocation().getY(), resolvedPosition.getY() + intersectionY.getHeight()));
+        resolvedPosition.setLocation(resolvedPosition.getX(), Math.min(entity.getY(), resolvedPosition.getY() + intersectionY.getHeight()));
       }
     }
 

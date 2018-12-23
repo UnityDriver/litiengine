@@ -1,4 +1,6 @@
-# The Game Class
+# The Game API
+
+![Game API](../images/api-game.png)
 
 [`de.gurkenlabs.litiengine.Game`](https://static.javadoc.io/de.gurkenlabs/litiengine/0.4.14/de/gurkenlabs/litiengine/Game.html) is 
 undoubtedly one of the classes that you will call the most when creating a game with LITIengine.
@@ -21,7 +23,7 @@ Game.addTerminatedListener(() ->
   // do sth when game is shut down
 });
 
-System.out.println("Game version is: " + Game.getInfo().getVersion());
+System.out.println("Game version is: " + Game.info().getVersion());
 
-Game.getSoundEngine().playSound(Sound.get("test.ogg"));
+Game.audio().playSound(Sound.get("test.ogg"));
 ```

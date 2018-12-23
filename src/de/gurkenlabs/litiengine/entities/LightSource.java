@@ -112,7 +112,7 @@ public class LightSource extends Entity implements IRenderable {
 
   @Override
   public void render(final Graphics2D g) {
-    if (Game.getConfiguration().graphics().renderDynamicShadows()) {
+    if (Game.config().graphics().renderDynamicShadows()) {
       this.renderShadows(g);
     }
   }
@@ -202,13 +202,13 @@ public class LightSource extends Entity implements IRenderable {
     return null;
   }
 
-  private static Ellipse2D getShadowEllipse(final IEntity mob) {
-    final int shadowHeight = (int) (mob.getHeight() / 4);
-    final int shadowWidth = (int) (mob.getWidth() / 3);
+  private static Ellipse2D getShadowEllipse(final IEntity entity) {
+    final int shadowHeight = (int) (entity.getHeight() / 4);
+    final int shadowWidth = (int) (entity.getWidth() / 3);
 
-    final int yOffset = (int) mob.getHeight();
-    final double x = mob.getLocation().getX() + (mob.getWidth() - shadowWidth) / 2;
-    final double y = mob.getLocation().getY() + yOffset - shadowHeight / 2.0;
+    final int yOffset = (int) entity.getHeight();
+    final double x = entity.getX() + (entity.getWidth() - shadowWidth) / 2;
+    final double y = entity.getY() + yOffset - shadowHeight / 2.0;
     return new Ellipse2D.Double(x, y, shadowWidth, shadowHeight);
   }
 
@@ -228,7 +228,7 @@ public class LightSource extends Entity implements IRenderable {
     final float ry = (float) bounds.getHeight() / 2f;
 
     // get relative center of entity
-    final Point2D relativeCenter = Game.getCamera().getViewportLocation(new Point((int) (bounds.getX() + r), (int) (bounds.getY() + ry)));
+    final Point2D relativeCenter = Game.world().camera().getViewportLocation(new Point((int) (bounds.getX() + r), (int) (bounds.getY() + ry)));
     final double cx = relativeCenter.getX();
     final double cy = relativeCenter.getY();
 
@@ -267,7 +267,7 @@ public class LightSource extends Entity implements IRenderable {
     shadowPolygon.addPoint((int) pointD.getX(), (int) pointD.getY());
     shadowPolygon.addPoint((int) pointC.getX(), (int) pointC.getY());
 
-    final Point2D shadowRenderLocation = Game.getCamera().getViewportLocation(new Point2D.Double(shadowEllipse.getX(), shadowEllipse.getY()));
+    final Point2D shadowRenderLocation = Game.world().camera().getViewportLocation(new Point2D.Double(shadowEllipse.getX(), shadowEllipse.getY()));
     final Ellipse2D relativeEllipse = new Ellipse2D.Double(shadowRenderLocation.getX(), shadowRenderLocation.getY(), shadowEllipse.getWidth(), shadowEllipse.getHeight());
 
     final Area ellipseArea = new Area(relativeEllipse);
@@ -305,24 +305,24 @@ public class LightSource extends Entity implements IRenderable {
    *          the center
    */
   private void renderShadows(final Graphics2D g) {
-    if (!Game.getEnvironment().getCombatEntities().stream().anyMatch(isInRange(this.getCenter(), SHADOW_GRADIENT_SIZE))) {
+    if (!Game.world().environment().getCombatEntities().stream().anyMatch(isInRange(this.getCenter(), SHADOW_GRADIENT_SIZE))) {
       return;
     }
 
     // we'll use a radial gradient
-    final Paint gradientPaint = new RadialGradientPaint(Game.getCamera().getViewportDimensionCenter(this), SHADOW_GRADIENT_SIZE, SHADOW_GRADIENT_FRACTIONS, SHADOW_GRADIENT_COLORS);
+    final Paint gradientPaint = new RadialGradientPaint(Game.world().camera().getViewportDimensionCenter(this), SHADOW_GRADIENT_SIZE, SHADOW_GRADIENT_FRACTIONS, SHADOW_GRADIENT_COLORS);
 
     // old Paint object for resetting it later
     final Paint oldPaint = g.getPaint();
     g.setPaint(gradientPaint);
 
     // for each entity
-    for (final ICombatEntity mob : Game.getEnvironment().getCombatEntities()) {
+    for (final ICombatEntity mob : Game.world().environment().getCombatEntities()) {
       if (mob.isDead() || !isInRange(this.getCenter(), SHADOW_GRADIENT_SIZE).test(mob)) {
         continue;
       }
 
-      final Shape obstructedVision = this.getObstructedVisionArea(mob, Game.getCamera().getViewportDimensionCenter(this));
+      final Shape obstructedVision = this.getObstructedVisionArea(mob, Game.world().camera().getViewportDimensionCenter(this));
       // fill the polygon with the gradient paint
 
       ShapeRenderer.render(g, obstructedVision);
@@ -337,12 +337,12 @@ public class LightSource extends Entity implements IRenderable {
   }
 
   private void updateAmbientLayers() {
-    if (Game.getEnvironment() != null && Game.getEnvironment().getAmbientLight() != null) {
-      Game.getEnvironment().getAmbientLight().updateSection(this.getBoundingBox());
+    if (Game.world().environment() != null && Game.world().environment().getAmbientLight() != null) {
+      Game.world().environment().getAmbientLight().updateSection(this.getBoundingBox());
     }
 
-    if (Game.getEnvironment() != null && Game.getEnvironment().getStaticShadowLayer() != null) {
-      Game.getEnvironment().getStaticShadowLayer().updateSection(this.getBoundingBox());
+    if (Game.world().environment() != null && Game.world().environment().getStaticShadowLayer() != null) {
+      Game.world().environment().getStaticShadowLayer().updateSection(this.getBoundingBox());
     }
   }
 

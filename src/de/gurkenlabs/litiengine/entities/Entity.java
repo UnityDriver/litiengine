@@ -11,6 +11,7 @@ import de.gurkenlabs.litiengine.Game;
 import de.gurkenlabs.litiengine.annotation.EntityInfo;
 import de.gurkenlabs.litiengine.annotation.Tag;
 import de.gurkenlabs.litiengine.entities.ai.IBehaviorController;
+import de.gurkenlabs.litiengine.environment.IEnvironment;
 import de.gurkenlabs.litiengine.environment.tilemap.ICustomPropertyProvider;
 import de.gurkenlabs.litiengine.environment.tilemap.MapObjectProperty;
 import de.gurkenlabs.litiengine.environment.tilemap.TmxProperty;
@@ -32,6 +33,8 @@ public abstract class Entity implements IEntity {
   private final EntityControllers controllers;
 
   private ICustomPropertyProvider properties;
+
+  private IEnvironment environment;
 
   private float angle;
 
@@ -132,12 +135,12 @@ public abstract class Entity implements IEntity {
 
   @Override
   public void removeMessageListener(MessageListener listener) {
-    for (List<MessageListener> listeners : this.messageListeners.values()) {
-      if (listeners == null || listeners.isEmpty()) {
+    for (List<MessageListener> listenerType : this.messageListeners.values()) {
+      if (listenerType == null || listenerType.isEmpty()) {
         continue;
       }
 
-      listeners.remove(listener);
+      listenerType.remove(listener);
     }
   }
 
@@ -182,13 +185,13 @@ public abstract class Entity implements IEntity {
       return this.boundingBox;
     }
 
-    this.boundingBox = new Rectangle2D.Double(this.getLocation().getX(), this.getLocation().getY(), this.getWidth(), this.getHeight());
+    this.boundingBox = new Rectangle2D.Double(this.getX(), this.getY(), this.getWidth(), this.getHeight());
     return this.boundingBox;
   }
 
   @Override
   public Point2D getCenter() {
-    return new Point2D.Double(this.getLocation().getX() + this.getWidth() * 0.5, this.getLocation().getY() + this.getHeight() * 0.5);
+    return new Point2D.Double(this.getX() + this.getWidth() * 0.5, this.getY() + this.getHeight() * 0.5);
   }
 
   @Override
@@ -323,28 +326,20 @@ public abstract class Entity implements IEntity {
     if (!this.getTags().contains(tag)) {
       this.getTags().add(tag);
     }
-    if (Game.getEnvironment() != null) {
-      Game.getEnvironment().getEntitiesByTag().computeIfAbsent(tag, t -> new CopyOnWriteArrayList<>()).add(this);
+    if (this.getEnvironment() != null) {
+      this.getEnvironment().getEntitiesByTag().computeIfAbsent(tag, t -> new CopyOnWriteArrayList<>()).add(this);
     }
-    /*
-    if (Game.getEnvironment().getEntitiesByTag().containsKey(tag)) {
-      Game.getEnvironment().getEntitiesByTag().get(tag).add(this);
-      return;
-    }
-    Game.getEnvironment().getEntitiesByTag().put(tag, new CopyOnWriteArrayList<>());
-    Game.getEnvironment().getEntitiesByTag().get(tag).add(this);
-    */
   }
 
   @Override
   public void removeTag(String tag) {
     this.getTags().remove(tag);
-    if (Game.getEnvironment() == null) {
+    if (Game.world().environment() == null) {
       return;
     }
-    Game.getEnvironment().getEntitiesByTag().get(tag).remove(this);
-    if (Game.getEnvironment().getEntitiesByTag().get(tag).isEmpty()) {
-      Game.getEnvironment().getEntitiesByTag().remove(tag);
+    this.getEnvironment().getEntitiesByTag().get(tag).remove(this);
+    if (this.getEnvironment().getEntitiesByTag().get(tag).isEmpty()) {
+      this.getEnvironment().getEntitiesByTag().remove(tag);
     }
   }
 
@@ -367,17 +362,27 @@ public abstract class Entity implements IEntity {
   }
 
   @Override
-  public void loaded() {
+  public IEnvironment getEnvironment() {
+    return this.environment;
+  }
+
+  @Override
+  public void loaded(IEnvironment environment) {
+    this.environment = environment;
+    
     for (EntityListener listener : this.listeners) {
-      listener.loaded(this);
+      listener.loaded(this, this.getEnvironment());
     }
   }
 
   @Override
-  public void removed() {
+  public void removed(IEnvironment environment) {
     for (EntityListener listener : this.listeners) {
-      listener.removed(this);
+      listener.removed(this, this.getEnvironment());
     }
+
+    // set to null after informing the listeners so they can still access the environment instance
+    this.environment = null;
   }
 
   protected EntityControllers getControllers() {

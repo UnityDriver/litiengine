@@ -7,7 +7,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -37,7 +36,6 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
       return new Thread(r, "Sound Playback Thread " + ++id);
     }
   });
-  private static final ExecutorService closeQueue = Executors.newSingleThreadExecutor(r -> new Thread(r, "Data Line Close Thread"));
 
   private final List<SoundPlaybackListener> playbackListeners;
 
@@ -111,13 +109,14 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
       readCount = str.read(buffer, 0, buffer.length);
 
       if (readCount < 0) {
-        if (!this.loop || this.dataLine == null) {
-          break;
+        synchronized (this) {
+          if (!this.loop || this.dataLine == null) {
+            break;
+          }
+  
+          this.restartDataLine();
+          str = new ByteArrayInputStream(this.sound.getStreamData());
         }
-
-        this.restartDataLine();
-        str = new ByteArrayInputStream(this.sound.getStreamData());
-
       } else if (this.dataLine != null) {
         this.dataLine.write(buffer, 0, readCount);
       }
@@ -125,12 +124,12 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
       // it can, however, establish a happens-before relationship
       // see https://community.oracle.com/thread/2381571
     }
-
-    if (this.dataLine != null) {
-      this.dataLine.drain();
-    }
     
     if (!this.cancelled) {
+      if (this.dataLine != null) {
+        this.dataLine.drain();
+        this.dataLine.close();
+      }
       final SoundEvent event = new SoundEvent(this, this.sound);
       for (SoundPlaybackListener listener : this.playbackListeners) {
         listener.finished(event);
@@ -143,6 +142,7 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
   @Override
   public void cancel() {
     this.cancelled = true;
+    this.dispose();
     this.playingIn.interrupt();
 
     final SoundEvent event = new SoundEvent(this, this.sound);
@@ -176,7 +176,7 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
   public void resumePlayback() {
     this.paused = false;
     synchronized (this) {
-      this.notify();
+      this.notifyAll();
     }
   }
 
@@ -197,30 +197,17 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
 
   protected static void terminate() {
     executorService.shutdownNow();
-    try {
-      executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.DAYS);
-    } catch (InterruptedException e) {
-    }
-    closeQueue.shutdown();
   }
 
-  void dispose() {
-    if (this.isPlaying()) {
-      this.cancel();
-    }
-
+  private synchronized void dispose() {
     if (this.dataLine != null) {
-      closeQueue.execute(() -> {
-        if (this.dataLine != null) {
-          this.dataLine.stop();
-          this.dataLine.flush();
-          this.dataLine.close();
-        }
-      });
-      this.dataLine = null;
-      this.gainControl = null;
-      this.panControl = null;
+      this.dataLine.stop();
+      this.dataLine.flush();
+      this.dataLine.close();
     }
+    this.dataLine = null;
+    this.gainControl = null;
+    this.panControl = null;
   }
 
   Sound getSound() {
@@ -235,7 +222,7 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
   }
 
   void play(final boolean loop) {
-    this.play(loop, Game.getConfiguration().sound().getSoundVolume());
+    this.play(loop, Game.config().sound().getSoundVolume());
   }
 
   void play(final boolean loop, final float volume) {
@@ -247,7 +234,7 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
   }
 
   void play(final Point2D location) {
-    this.play(false, location, Game.getConfiguration().sound().getSoundVolume());
+    this.play(false, location, Game.config().sound().getSoundVolume());
   }
 
   void play(final boolean loop, final Point2D location, final float gain) {
@@ -307,14 +294,14 @@ final class SoundPlayback implements Runnable, ISoundPlayback {
     final float distanceFromListener = (float) currentLocation.distance(listenerLocation);
     if (distanceFromListener <= 0) {
       gain = 1.0f;
-    } else if (distanceFromListener >= Game.getSoundEngine().getMaxDistance()) {
+    } else if (distanceFromListener >= Game.audio().getMaxDistance()) {
       gain = 0.0f;
     } else {
-      gain = 1.0f - distanceFromListener / Game.getSoundEngine().getMaxDistance();
+      gain = 1.0f - distanceFromListener / Game.audio().getMaxDistance();
     }
 
     gain = MathUtilities.clamp(gain, 0, 1);
-    gain *= Game.getConfiguration().sound().getSoundVolume();
+    gain *= Game.config().sound().getSoundVolume();
     return gain;
   }
 

@@ -4,13 +4,13 @@ import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.List;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class ArrayUtilities {
-  public static final String DEFALUT_SEPARATOR = ",";
   private static final Logger log = Logger.getLogger(ArrayUtilities.class.getName());
 
   private ArrayUtilities() {
@@ -79,104 +79,96 @@ public final class ArrayUtilities {
   }
 
   public static String join(boolean[] arr) {
-    return join(arr, DEFALUT_SEPARATOR);
+    return joinArray(arr, ",");
   }
 
   public static String join(boolean[] arr, String separator) {
-    List<Boolean> list = new ArrayList<>();
-    for (int i = 0; i < arr.length; i++) {
-      list.add(arr[i]);
-    }
-
-    return join(list, separator);
+    return joinArray(arr, separator);
   }
 
   public static String join(int[] arr) {
-    return join(arr, DEFALUT_SEPARATOR);
+    return joinArray(arr, ",");
   }
 
   public static String join(int[] arr, String separator) {
-    return join(Arrays.stream(arr).boxed().toArray(Integer[]::new), separator);
+    return joinArray(arr, separator);
   }
 
   public static String join(double[] arr) {
-    return join(arr, DEFALUT_SEPARATOR);
+    return joinArray(arr, ",");
   }
 
   public static String join(double[] arr, String separator) {
-    return join(Arrays.stream(arr).boxed().toArray(Double[]::new), separator);
+    return joinArray(arr, separator);
   }
 
   public static String join(float[] arr) {
-    return join(arr, DEFALUT_SEPARATOR);
+    return joinArray(arr, ",");
   }
 
   public static String join(float[] arr, String separator) {
-    List<Float> list = new ArrayList<>();
-    for (int i = 0; i < arr.length; i++) {
-      list.add(arr[i]);
-    }
-    return join(list, separator);
+    return joinArray(arr, separator);
   }
 
   public static String join(short[] arr) {
-    return join(arr, DEFALUT_SEPARATOR);
+    return joinArray(arr, ",");
   }
 
   public static String join(short[] arr, String separator) {
-    List<Short> list = new ArrayList<>();
-    for (int i = 0; i < arr.length; i++) {
-      list.add(arr[i]);
-    }
-    return join(list, separator);
+    return joinArray(arr, separator);
   }
 
   public static String join(long[] arr) {
-    return join(arr, DEFALUT_SEPARATOR);
+    return join(arr, ",");
   }
 
   public static String join(long[] arr, String separator) {
-    return join(Arrays.stream(arr).boxed().toArray(Long[]::new), separator);
+    return joinArray(arr, separator);
   }
 
   public static String join(byte[] arr) {
-    return join(arr, DEFALUT_SEPARATOR);
+    return join(arr, ",");
   }
 
   public static String join(byte[] arr, String separator) {
-    List<Byte> list = new ArrayList<>();
-    for (int i = 0; i < arr.length; i++) {
-      list.add(arr[i]);
-    }
-    return join(list, separator);
+    return joinArray(arr, separator);
   }
 
-  public static <T> String join(List<T> list) {
-    return join(list, ",");
+  public static String join(List<?> list) {
+    return joinArray(list.toArray(), ",");
   }
 
-  public static <T> String join(List<T> list, String separator) {
-    if (list == null || list.isEmpty()) {
+  public static String join(List<?> list, String separator) {
+    return joinArray(list.toArray(), separator);
+  }
+
+  public static String join(Object[] arr) {
+    return joinArray(arr, ",");
+  }
+
+  public static String join(Object[] arr, String separator) {
+    return joinArray(arr, separator);
+  }
+
+  // general method for joining an array
+  // encapsulated for type safety
+  private static String joinArray(Object arr, String separator) {
+    if (arr == null) {
       return null;
     }
 
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < list.size(); i++) {
-      sb.append(list.get(i));
-      if (i < list.size() - 1) {
-        sb.append(separator);
-      }
+    int len = Array.getLength(arr);
+    if (len == 0) {
+      return null;
+    }
+
+    StringBuilder sb = new StringBuilder(String.valueOf(Array.get(arr, 0)));
+    for (int i = 1; i < len; i++) {
+      sb.append(separator);
+      sb.append(Array.get(arr, i));
     }
 
     return sb.toString();
-  }
-
-  public static <T> String join(T[] arr) {
-    return join(Arrays.asList(arr), DEFALUT_SEPARATOR);
-  }
-
-  public static <T> String join(T[] arr, String separator) {
-    return join(Arrays.asList(arr), separator);
   }
 
   public static <T> List<T> toList(T[][] arr) {
@@ -189,20 +181,35 @@ public final class ArrayUtilities {
   }
 
   public static <T> T getRandom(T[] arr) {
+    return getRandom(arr, ThreadLocalRandom.current());
+  }
+
+  public static <T> T getRandom(T[] arr, Random rand) {
     if (arr.length == 0) {
       return null;
     }
-
-    final int randomIndex = new Random().nextInt(arr.length);
-    return arr[randomIndex];
+    return arr[rand.nextInt(arr.length)];
   }
 
-  public static <T> boolean contains(T[] arr, T value) {
+  public static void shuffle(Object[] arr) {
+    shuffle(arr, ThreadLocalRandom.current());
+  }
+
+  public static void shuffle(Object[] arr, Random rand) {
+    for (int i = arr.length - 1; i > 0; i--) {
+      int swap = rand.nextInt(i + 1);
+      Object temp = arr[i];
+      arr[i] = arr[swap];
+      arr[swap] = temp;
+    }
+  }
+
+  public static boolean contains(Object[] arr, Object value) {
     if (value == null) {
       return false;
     }
 
-    for (T v : arr) {
+    for (Object v : arr) {
       if (v != null && v.equals(value)) {
         return true;
       }
@@ -253,10 +260,10 @@ public final class ArrayUtilities {
   }
 
   public static int[] toIntegerArray(List<Integer> intList) {
-    Object[] objArray = intList.toArray();
+    Integer[] objArray = intList.toArray(new Integer[0]);
     int[] intArray = new int[objArray.length];
     for (int i = 0; i < intArray.length; i++) {
-      intArray[i] = (int) objArray[i];
+      intArray[i] = objArray[i];
     }
     return intArray;
   }

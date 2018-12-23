@@ -121,13 +121,13 @@ public class Program {
       log.log(Level.SEVERE, e.getLocalizedMessage(), e);
     }
 
-    Game.getInfo().setName("utiLITI");
-    Game.getInfo().setSubTitle("LITIengine Creation Kit");
-    Game.getInfo().setVersion("v0.4.14-alpha");
+    Game.info().setName("utiLITI");
+    Game.info().setSubTitle("LITIengine Creation Kit");
+    Game.info().setVersion("v0.4.14-alpha");
 
     initSystemTray();
 
-    Game.getConfiguration().getConfigurationGroups().add(new UserPreferenceConfiguration());
+    Game.config().getConfigurationGroups().add(new UserPreferenceConfiguration());
     Game.init(args);
     Game.setUncaughtExceptionHandler(new EditorUncaughtExceptionHandler());
 
@@ -135,15 +135,15 @@ public class Program {
 
     JOptionPane.setDefaultLocale(Locale.getDefault());
 
-    userPreferences = Game.getConfiguration().getConfigurationGroup("user_", UserPreferenceConfiguration.class);
-    Game.getCamera().onZoomChanged(zoom -> userPreferences.setZoom(zoom));
+    userPreferences = Game.config().getConfigurationGroup("user_", UserPreferenceConfiguration.class);
 
-    Game.getScreenManager().addScreen(EditorScreen.instance());
-    Game.getScreenManager().displayScreen("EDITOR");
+    Game.world().camera().onZoomChanged(zoom -> userPreferences.setZoom((float)zoom));
 
-    Game.getScreenManager().getRenderComponent().setCursor(CURSOR, 0, 0);
-    Game.getScreenManager().getRenderComponent().setCursorOffsetX(0);
-    Game.getScreenManager().getRenderComponent().setCursorOffsetY(0);
+    Game.screens().display(EditorScreen.instance());
+
+    Game.window().getRenderComponent().setCursor(CURSOR, 0, 0);
+    Game.window().getRenderComponent().setCursorOffsetX(0);
+    Game.window().getRenderComponent().setCursorOffsetY(0);
     setupInterface();
     Game.start();
     Input.mouse().setGrabMouse(false);
@@ -157,10 +157,10 @@ public class Program {
 
   private static void forceBasicEditorConfiguration() {
     // force configuration elements that are crucial for the editor
-    Game.getRenderEngine().setBaseRenderScale(1.0f);
-    Game.getConfiguration().debug().setDebugEnabled(true);
-    Game.getConfiguration().graphics().setGraphicQuality(Quality.VERYHIGH);
-    Game.getConfiguration().graphics().setReduceFramesWhenNotFocused(false);
+    Game.graphics().setBaseRenderScale(1.0f);
+    Game.config().debug().setDebugEnabled(true);
+    Game.config().graphics().setGraphicQuality(Quality.VERYHIGH);
+    Game.config().graphics().setReduceFramesWhenNotFocused(false);
   }
 
   public static void loadRecentFiles() {
@@ -208,11 +208,11 @@ public class Program {
 
   public static void updateScrollBars() {
     horizontalScroll.setMinimum(0);
-    horizontalScroll.setMaximum(Game.getEnvironment().getMap().getSizeInPixels().width);
+    horizontalScroll.setMaximum(Game.world().environment().getMap().getSizeInPixels().width);
     verticalScroll.setMinimum(0);
-    verticalScroll.setMaximum(Game.getEnvironment().getMap().getSizeInPixels().height);
-    horizontalScroll.setValue((int) Game.getCamera().getViewport().getCenterX());
-    verticalScroll.setValue((int) Game.getCamera().getViewport().getCenterY());
+    verticalScroll.setMaximum(Game.world().environment().getMap().getSizeInPixels().height);
+    horizontalScroll.setValue((int) Game.world().camera().getViewport().getCenterX());
+    verticalScroll.setValue((int) Game.world().camera().getViewport().getCenterY());
   }
 
   public static boolean notifyPendingChanges() {
@@ -221,7 +221,7 @@ public class Program {
       return true;
     }
 
-    int n = JOptionPane.showConfirmDialog(Game.getScreenManager().getRenderComponent(), Resources.strings().get("hud_saveProjectMessage") + "\n" + resourceFile, Resources.strings().get("hud_saveProject"), JOptionPane.YES_NO_CANCEL_OPTION);
+    int n = JOptionPane.showConfirmDialog(Game.window().getRenderComponent(), Resources.strings().get("hud_saveProjectMessage") + "\n" + resourceFile, Resources.strings().get("hud_saveProject"), JOptionPane.YES_NO_CANCEL_OPTION);
 
     if (n == JOptionPane.YES_OPTION) {
       EditorScreen.instance().save(false);
@@ -261,7 +261,7 @@ public class Program {
   private static void setupInterface() {
     JFrame window = initWindow();
 
-    Canvas canvas = Game.getScreenManager().getRenderComponent();
+    Canvas canvas = Game.window().getRenderComponent();
     canvas.setFocusable(true);
     canvas.setSize((int) (window.getSize().width * 0.75), window.getSize().height);
 
@@ -300,7 +300,7 @@ public class Program {
   }
 
   private static JFrame initWindow() {
-    JFrame window = ((JFrame) Game.getScreenManager());
+    JFrame window = ((JFrame) Game.screens());
     window.setResizable(true);
 
     Game.addGameListener(new GameAdapter() {
@@ -415,16 +415,16 @@ public class Program {
         return;
       }
 
-      Point2D newFocus = new Point2D.Double(horizontalScroll.getValue(), Game.getCamera().getFocus().getY());
-      Game.getCamera().setFocus(newFocus);
+      Point2D newFocus = new Point2D.Double(horizontalScroll.getValue(), Game.world().camera().getFocus().getY());
+      Game.world().camera().setFocus(newFocus);
     });
 
     verticalScroll.addAdjustmentListener(e -> {
       if (EditorScreen.instance().getMapComponent().isLoading()) {
         return;
       }
-      Point2D newFocus = new Point2D.Double(Game.getCamera().getFocus().getX(), verticalScroll.getValue());
-      Game.getCamera().setFocus(newFocus);
+      Point2D newFocus = new Point2D.Double(Game.world().camera().getFocus().getX(), verticalScroll.getValue());
+      Game.world().camera().setFocus(newFocus);
     });
   }
 
@@ -491,7 +491,7 @@ public class Program {
     MenuItem setGrid = new MenuItem(Resources.strings().get("menu_gridSettings"));
     setGrid.addActionListener(a -> {
       GridEditPanel panel = new GridEditPanel(EditorScreen.instance().getMapComponent().getGridWidth(), EditorScreen.instance().getMapComponent().getGridHeight(), EditorScreen.instance().getMapComponent().getGridStrokeFactor(), EditorScreen.instance().getMapComponent().getGridColor());
-      int option = JOptionPane.showConfirmDialog(Game.getScreenManager().getRenderComponent(), panel, Resources.strings().get("menu_gridSettings"), JOptionPane.PLAIN_MESSAGE);
+      int option = JOptionPane.showConfirmDialog(Game.window().getRenderComponent(), panel, Resources.strings().get("menu_gridSettings"), JOptionPane.PLAIN_MESSAGE);
       if (option == JOptionPane.OK_OPTION) {
         EditorScreen.instance().getMapComponent().setGridSize(panel.getGridSize().width, panel.getGridSize().height);
         EditorScreen.instance().getMapComponent().setGridColor(panel.getGridColor());
@@ -568,15 +568,13 @@ public class Program {
 
     MenuItem saveMapSnapshot = new MenuItem(Resources.strings().get("menu_exportMapSnapshot"));
     saveMapSnapshot.setShortcut(new MenuShortcut(KeyEvent.VK_ENTER));
-    saveMapSnapshot.addActionListener(a -> {
-      EditorScreen.instance().saveMapSnapshot();
-    });
+    saveMapSnapshot.addActionListener(a -> EditorScreen.instance().saveMapSnapshot());
 
     MenuItem reassignIDs = new MenuItem(Resources.strings().get("menu_reassignMapIds"));
     reassignIDs.addActionListener(a -> {
       try {
         int minID = Integer.parseInt(JOptionPane.showInputDialog(Resources.strings().get("panel_reassignMapIds"), 1));
-        EditorScreen.instance().getMapComponent().reassignIds(Game.getEnvironment().getMap(), minID);
+        EditorScreen.instance().getMapComponent().reassignIds(Game.world().environment().getMap(), minID);
       } catch (Exception e) {
         log.log(Level.SEVERE, "No parseable Integer found upon reading the min Map ID input. Try again.");
       }
@@ -594,24 +592,24 @@ public class Program {
       }
 
       MapPropertyPanel panel = new MapPropertyPanel();
-      panel.bind(Game.getEnvironment().getMap());
+      panel.bind(Game.world().environment().getMap());
 
-      int option = JOptionPane.showConfirmDialog(Game.getScreenManager().getRenderComponent(), panel, Resources.strings().get("menu_mapProperties"), JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+      int option = JOptionPane.showConfirmDialog(Game.window().getRenderComponent(), panel, Resources.strings().get("menu_mapProperties"), JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
       if (option == JOptionPane.OK_OPTION) {
         panel.saveChanges();
 
-        final String colorProp = Game.getEnvironment().getMap().getStringValue(MapProperty.AMBIENTCOLOR);
+        final String colorProp = Game.world().environment().getMap().getStringValue(MapProperty.AMBIENTCOLOR);
         try {
           if (colorProp != null && !colorProp.isEmpty()) {
             Color ambientColor = ColorHelper.decode(colorProp);
-            Game.getEnvironment().getAmbientLight().setColor(ambientColor);
+            Game.world().environment().getAmbientLight().setColor(ambientColor);
           }
         } catch (final NumberFormatException nfe) {
           log.log(Level.SEVERE, nfe.getLocalizedMessage(), nfe);
         }
 
         EditorScreen.instance().getMapComponent().loadMaps(EditorScreen.instance().getGameFile().getMaps());
-        EditorScreen.instance().getMapComponent().loadEnvironment((Map) Game.getEnvironment().getMap());
+        EditorScreen.instance().getMapComponent().loadEnvironment((Map) Game.world().environment().getMap());
       }
     });
 
@@ -648,8 +646,8 @@ public class Program {
     payPalMenuItem.addActionListener(event -> UriUtilities.openWebpage(URI.create(Resources.strings().get("link_LITIengine_wiki"))));
 
     MenuItem aboutMenuItem = new MenuItem(Resources.strings().get("menu_help_about"));
-    aboutMenuItem.addActionListener(event -> JOptionPane.showMessageDialog(((JFrame) Game.getScreenManager()),
-        Resources.strings().get("menu_help_abouttext") + "\n" + Resources.strings().get("menu_help_releases") + Resources.strings().get("link_LITIengine_releases") + "\n\n" + Resources.strings().get("copyright_gurkenlabs") + "\n" + Resources.strings().get("copyright_LITIengine"), Resources.strings().get("menu_help_about") + " " + Game.getInfo().getVersion(),
+    aboutMenuItem.addActionListener(event -> JOptionPane.showMessageDialog(((JFrame) Game.screens()),
+        Resources.strings().get("menu_help_abouttext") + "\n" + Resources.strings().get("menu_help_releases") + Resources.strings().get("link_LITIengine_releases") + "\n\n" + Resources.strings().get("copyright_gurkenlabs") + "\n" + Resources.strings().get("copyright_LITIengine"), Resources.strings().get("menu_help_about") + " " + Game.info().getVersion(),
         JOptionPane.INFORMATION_MESSAGE));
 
     helpMenu.add(tutorialMenuItem);
@@ -776,7 +774,7 @@ public class Program {
       EditorScreen.instance().getMapComponent().setEditMode(MapComponent.EDITMODE_EDIT);
       isChanging = false;
 
-      Game.getScreenManager().getRenderComponent().setCursor(CURSOR, 0, 0);
+      Game.window().getRenderComponent().setCursor(CURSOR, 0, 0);
     });
     basicMenu.add(ed);
     basicMenu.add(mv);
@@ -799,7 +797,7 @@ public class Program {
       EditorScreen.instance().getMapComponent().setEditMode(MapComponent.EDITMODE_MOVE);
       isChanging = false;
 
-      Game.getScreenManager().getRenderComponent().setCursor(CURSOR_MOVE, 0, 0);
+      Game.window().getRenderComponent().setCursor(CURSOR_MOVE, 0, 0);
     });
 
     EditorScreen.instance().getMapComponent().onEditModeChanged(i -> {
@@ -812,7 +810,7 @@ public class Program {
         mv.setSelected(false);
         place.setSelected(true);
         place.requestFocus();
-        Game.getScreenManager().getRenderComponent().setCursor(Program.CURSOR_ADD, 0, 0);
+        Game.window().getRenderComponent().setCursor(Program.CURSOR_ADD, 0, 0);
       }
 
       if (i == MapComponent.EDITMODE_EDIT) {
@@ -820,7 +818,7 @@ public class Program {
         mv.setSelected(false);
         ed.setSelected(true);
         ed.requestFocus();
-        Game.getScreenManager().getRenderComponent().setCursor(CURSOR, 0, 0);
+        Game.window().getRenderComponent().setCursor(CURSOR, 0, 0);
       }
 
       if (i == MapComponent.EDITMODE_MOVE) {
@@ -832,7 +830,7 @@ public class Program {
         place.setSelected(false);
         mv.setSelected(true);
         mv.requestFocus();
-        Game.getScreenManager().getRenderComponent().setCursor(CURSOR_MOVE, 0, 0);
+        Game.window().getRenderComponent().setCursor(CURSOR_MOVE, 0, 0);
       }
     });
 
@@ -910,14 +908,14 @@ public class Program {
     spinnerAmbientAlpha.setMaximumSize(new Dimension(50, 50));
     spinnerAmbientAlpha.setEnabled(true);
     spinnerAmbientAlpha.addChangeListener(e -> {
-      if (Game.getEnvironment() == null || Game.getEnvironment().getMap() == null || isChanging) {
+      if (Game.world().environment() == null || Game.world().environment().getMap() == null || isChanging) {
         return;
       }
 
-      Game.getEnvironment().getAmbientLight().setAlpha((int) spinnerAmbientAlpha.getValue());
-      String hex = ColorHelper.encode(Game.getEnvironment().getAmbientLight().getColor());
+      Game.world().environment().getAmbientLight().setAlpha((int) spinnerAmbientAlpha.getValue());
+      String hex = ColorHelper.encode(Game.world().environment().getAmbientLight().getColor());
       colorText.setText(hex);
-      Game.getEnvironment().getMap().setValue(MapProperty.AMBIENTCOLOR, hex);
+      Game.world().environment().getMap().setValue(MapProperty.AMBIENTCOLOR, hex);
 
     });
 
@@ -928,7 +926,7 @@ public class Program {
     colorText.setEnabled(false);
 
     colorButton.addActionListener(a -> {
-      if (Game.getEnvironment() == null || Game.getEnvironment().getMap() == null || isChanging) {
+      if (Game.world().environment() == null || Game.world().environment().getMap() == null || isChanging) {
         return;
       }
 
@@ -944,9 +942,9 @@ public class Program {
 
       spinnerAmbientAlpha.setValue(result.getAlpha());
 
-      Game.getEnvironment().getMap().setValue(MapProperty.AMBIENTCOLOR, colorText.getText());
-      Game.getEnvironment().getAmbientLight().setColor(result);
-      String hex = ColorHelper.encode(Game.getEnvironment().getAmbientLight().getColor());
+      Game.world().environment().getMap().setValue(MapProperty.AMBIENTCOLOR, colorText.getText());
+      Game.world().environment().getAmbientLight().setColor(result);
+      String hex = ColorHelper.encode(Game.world().environment().getAmbientLight().getColor());
       colorText.setText(hex);
     });
 
@@ -1101,7 +1099,7 @@ public class Program {
       exitItem.addActionListener(a -> System.exit(0));
       menu.add(exitItem);
 
-      trayIcon = new TrayIcon(Resources.images().get("litiengine-icon.png"), Game.getInfo().toString(), menu);
+      trayIcon = new TrayIcon(Resources.images().get("litiengine-icon.png"), Game.info().toString(), menu);
       trayIcon.setImageAutoSize(true);
       try {
         tray.add(trayIcon);

@@ -6,6 +6,7 @@ import java.awt.geom.Rectangle2D;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import java.util.function.DoubleConsumer;
 
 import de.gurkenlabs.litiengine.Game;
 import de.gurkenlabs.litiengine.entities.IEntity;
@@ -13,8 +14,8 @@ import de.gurkenlabs.litiengine.graphics.animation.IAnimationController;
 import de.gurkenlabs.litiengine.util.MathUtilities;
 
 public class Camera implements ICamera {
-  private final List<Consumer<Float>> zoomChangedConsumer;
-  private final List<Consumer<Point2D>> focusChangedConsumer;
+  private final List<DoubleConsumer> zoomChangedConsumer = new CopyOnWriteArrayList<>();
+  private final List<Consumer<Point2D>> focusChangedConsumer = new CopyOnWriteArrayList<>();
   /**
    * Provides the center location for the viewport.
    */
@@ -40,6 +41,9 @@ public class Camera implements ICamera {
 
   private long zoomTick;
 
+  private Point2D targetFocus;
+  private int panTime = 0;
+
   // TODO: implement possiblity to provide a padding
   private boolean clampToMap;
 
@@ -47,10 +51,8 @@ public class Camera implements ICamera {
    * Instantiates a new camera.
    */
   public Camera() {
-    this.zoomChangedConsumer = new CopyOnWriteArrayList<>();
-    this.focusChangedConsumer = new CopyOnWriteArrayList<>();
-    this.focus = new Point2D.Double(0, 0);
-    this.viewPort = new Rectangle2D.Double(0, 0, 0, 0);
+    this.focus = new Point2D.Double();
+    this.viewPort = new Rectangle2D.Double();
     this.zoom = 1;
   }
 
@@ -120,11 +122,11 @@ public class Camera implements ICamera {
 
   @Override
   public float getRenderScale() {
-    return Game.getRenderEngine().getBaseRenderScale() * this.getZoom();
+    return Game.graphics().getBaseRenderScale() * this.getZoom();
   }
 
   @Override
-  public void onZoomChanged(final Consumer<Float> zoomCons) {
+  public void onZoomChanged(final DoubleConsumer zoomCons) {
     this.zoomChangedConsumer.add(zoomCons);
   }
 
@@ -164,7 +166,7 @@ public class Camera implements ICamera {
   @Override
   public void setZoom(final float targetZoom, final int delay) {
     if (delay == 0) {
-      for (final Consumer<Float> cons : this.zoomChangedConsumer) {
+      for (final DoubleConsumer cons : this.zoomChangedConsumer) {
         cons.accept(targetZoom);
       }
 
@@ -174,11 +176,11 @@ public class Camera implements ICamera {
       this.zoomTick = 0;
       this.zoomStep = 0;
     } else {
-      this.zoomTick = Game.getLoop().getTicks();
+      this.zoomTick = Game.loop().getTicks();
       this.targetZoom = targetZoom;
       this.zoomDelay = delay;
 
-      final double tickduration = 1000 / (double) Game.getLoop().getUpdateRate();
+      final double tickduration = 1000 / (double) Game.loop().getUpdateRate();
       final double tickAmount = delay / tickduration;
       final float totalDelta = this.targetZoom - this.zoom;
       this.zoomStep = tickAmount > 0 ? (float) (totalDelta / tickAmount) : totalDelta;
@@ -187,7 +189,7 @@ public class Camera implements ICamera {
 
   @Override
   public void shake(final double intensity, final int delay, final int shakeDuration) {
-    this.shakeTick = Game.getLoop().getTicks();
+    this.shakeTick = Game.loop().getTicks();
     this.shakeDelay = delay;
     this.shakeIntensity = intensity;
     this.shakeDuration = shakeDuration;
@@ -195,13 +197,13 @@ public class Camera implements ICamera {
 
   @Override
   public void update() {
-    if (Game.getCamera() != null && !Game.getCamera().equals(this)) {
+    if (Game.world().camera() != null && !Game.world().camera().equals(this)) {
       return;
     }
 
     if (this.targetZoom > 0) {
-      if (Game.getLoop().getDeltaTime(this.zoomTick) >= this.zoomDelay) {
-        for (final Consumer<Float> cons : this.zoomChangedConsumer) {
+      if (Game.loop().getDeltaTime(this.zoomTick) >= this.zoomDelay) {
+        for (final DoubleConsumer cons : this.zoomChangedConsumer) {
           cons.accept(this.zoom);
         }
 
@@ -213,9 +215,24 @@ public class Camera implements ICamera {
       } else {
 
         this.zoom += this.zoomStep;
-        for (final Consumer<Float> cons : this.zoomChangedConsumer) {
+        for (final DoubleConsumer cons : this.zoomChangedConsumer) {
           cons.accept(this.zoom);
         }
+      }
+    }
+
+    if (this.panTime > 0) {
+      if (--this.panTime <= 0) {
+        this.setFocus(this.targetFocus);
+        this.targetFocus = null;
+
+        for (Consumer<Point2D> cons : this.focusChangedConsumer) {
+          cons.accept(focus);
+        }
+      } else {
+        double diff = this.panTime / (this.panTime + 1.0);
+        this.focus = new Point2D.Double(this.focus.getX() * diff + this.targetFocus.getX() * (1.0 - diff),
+            this.focus.getY() * diff + this.targetFocus.getY() * (1.0 - diff));
       }
     }
 
@@ -225,10 +242,10 @@ public class Camera implements ICamera {
       return;
     }
 
-    if (Game.getLoop().getDeltaTime(this.lastShake) > this.shakeDelay) {
+    if (Game.loop().getDeltaTime(this.lastShake) > this.shakeDelay) {
       this.shakeOffsetX = this.getShakeIntensity() * MathUtilities.randomSign();
       this.shakeOffsetY = this.getShakeIntensity() * MathUtilities.randomSign();
-      this.lastShake = Game.getLoop().getTicks();
+      this.lastShake = Game.loop().getTicks();
     }
   }
 
@@ -238,7 +255,7 @@ public class Camera implements ICamera {
 
     final double viewPortX = this.getFocus().getX() - this.getViewPortCenterX();
     final double viewPortY = this.getFocus().getY() - this.getViewPortCenterY();
-    this.viewPort = new Rectangle2D.Double(viewPortX, viewPortY, Game.getScreenManager().getResolution().getWidth() / this.getRenderScale(), Game.getScreenManager().getResolution().getHeight() / this.getRenderScale());
+    this.viewPort = new Rectangle2D.Double(viewPortX, viewPortY, Game.window().getResolution().getWidth() / this.getRenderScale(), Game.window().getResolution().getHeight() / this.getRenderScale());
   }
 
   @Override
@@ -253,14 +270,15 @@ public class Camera implements ICamera {
 
   // TODO: write a unit test for this
   protected Point2D clampToMap(Point2D focus) {
-    if (Game.getEnvironment() == null || Game.getEnvironment().getMap() == null || !this.isClampToMap()) {
-      return focus;
+
+    if (Game.world().environment() == null || Game.world().environment().getMap() == null || !this.isClampToMap()) {
+      return new Point2D.Double(focus.getX(), focus.getY());
     }
 
-    final Dimension mapSize = Game.getEnvironment().getMap().getSizeInPixels();
+    final Dimension mapSize = Game.world().environment().getMap().getSizeInPixels();
 
     // TODO: Implement special handling for maps that are smaller than the camera area: use Align, Valign to determine where to render them
-    final Dimension resolution = Game.getScreenManager().getResolution();
+    final Dimension resolution = Game.window().getResolution();
     double minX = resolution.getWidth() / this.getRenderScale() / 2.0;
     double maxX = mapSize.getWidth() - minX;
     double minY = resolution.getHeight() / this.getRenderScale() / 2.0;
@@ -315,14 +333,25 @@ public class Camera implements ICamera {
   }
 
   private double getViewPortCenterX() {
-    return Game.getScreenManager().getResolution().getWidth() * 0.5 / this.getRenderScale();
+    return Game.window().getResolution().getWidth() * 0.5 / this.getRenderScale();
   }
 
   private double getViewPortCenterY() {
-    return Game.getScreenManager().getResolution().getHeight() * 0.5 / this.getRenderScale();
+    return Game.window().getResolution().getHeight() * 0.5 / this.getRenderScale();
   }
 
   private boolean isShakeEffectActive() {
-    return this.getShakeTick() != 0 && Game.getLoop().getDeltaTime(this.getShakeTick()) < this.getShakeDuration();
+    return this.getShakeTick() != 0 && Game.loop().getDeltaTime(this.getShakeTick()) < this.getShakeDuration();
+  }
+
+  @Override
+  public void pan(Point2D focus, int duration) {
+    this.targetFocus = this.clampToMap(focus);
+    this.panTime = duration;
+  }
+
+  @Override
+  public void pan(double x, double y, int duration) {
+    this.pan(new Point2D.Double(x, y), duration);
   }
 }

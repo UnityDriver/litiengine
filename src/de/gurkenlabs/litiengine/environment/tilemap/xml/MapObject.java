@@ -7,7 +7,6 @@ import java.util.Arrays;
 import javax.xml.bind.Unmarshaller;
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlTransient;
 import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 
@@ -18,7 +17,6 @@ import de.gurkenlabs.litiengine.environment.tilemap.IMapObjectLayer;
 /**
  * The Class MapObject.
  */
-@XmlRootElement(name = "object")
 public class MapObject extends CustomPropertyProvider implements IMapObject {
   private static final long serialVersionUID = -6001981756772928868L;
 
@@ -73,7 +71,7 @@ public class MapObject extends CustomPropertyProvider implements IMapObject {
   public MapObject(MapObject mapObjectToBeCopied) {
     super(mapObjectToBeCopied);
     this.setName(mapObjectToBeCopied.getName());
-    this.setId(Game.getEnvironment().getNextMapId());
+    this.setId(Game.world().environment().getNextMapId());
     this.polyline = (mapObjectToBeCopied.getPolyline() != null && !mapObjectToBeCopied.getPolyline().getPoints().isEmpty()) ? new Polyline(mapObjectToBeCopied.getPolyline()) : null;
     this.setType(mapObjectToBeCopied.getType());
     this.setX(mapObjectToBeCopied.getX());

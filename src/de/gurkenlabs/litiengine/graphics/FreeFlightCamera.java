@@ -27,7 +27,7 @@ public class FreeFlightCamera extends Camera implements IUpdateable {
     this.scrollPadding = DEFAULT_SCROLL_PADDING;
     this.setClampToMap(true);
 
-    Game.getLoop().attach(this);
+    Game.loop().attach(this);
   }
 
   public double getVelocity() {
@@ -52,13 +52,13 @@ public class FreeFlightCamera extends Camera implements IUpdateable {
   }
 
   private void handleFreeFlightCamera() {
-    if (Game.getEnvironment() == null || Game.getEnvironment().getMap() == null) {
+    if (Game.world().environment() == null || Game.world().environment().getMap() == null) {
       return;
     }
 
     final Point2D mouseLocation = Input.mouse().getLocation();
 
-    final double scrollSpeed = this.getVelocity() / (double) Game.getLoop().getUpdateRate() * Game.getConfiguration().input().getMouseSensitivity();
+    final double scrollSpeed = this.getVelocity() / (double) Game.loop().getUpdateRate() * Game.config().input().getMouseSensitivity();
 
     double x = this.getFocus().getX();
     double y = this.getFocus().getY();
@@ -66,14 +66,14 @@ public class FreeFlightCamera extends Camera implements IUpdateable {
     double deltaX = 0;
     if (mouseLocation.getX() < this.getScrollPadding()) {
       deltaX -= scrollSpeed;
-    } else if (Game.getScreenManager().getResolution().getWidth() - mouseLocation.getX() < this.getScrollPadding()) {
+    } else if (Game.window().getResolution().getWidth() - mouseLocation.getX() < this.getScrollPadding()) {
       deltaX += scrollSpeed;
     }
 
     double deltaY = 0;
     if (mouseLocation.getY() < this.getScrollPadding()) {
       deltaY -= scrollSpeed;
-    } else if (Game.getScreenManager().getResolution().getHeight() - mouseLocation.getY() < this.getScrollPadding()) {
+    } else if (Game.window().getResolution().getHeight() - mouseLocation.getY() < this.getScrollPadding()) {
       deltaY += scrollSpeed;
     }
 

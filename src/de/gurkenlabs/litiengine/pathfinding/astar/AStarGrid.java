@@ -125,7 +125,7 @@ public class AStarGrid implements IRenderable {
 
   @Override
   public void render(Graphics2D g) {
-    final Rectangle2D viewport = Game.getCamera().getViewport();
+    final Rectangle2D viewport = Game.world().camera().getViewport();
 
     final AStarNode startNode = this.getNode(viewport.getX(), viewport.getY());
     final AStarNode endNode = this.getNode(viewport.getMaxX(), viewport.getMaxY());
@@ -139,9 +139,9 @@ public class AStarGrid implements IRenderable {
       for (int y = startY; y <= endY; y++) {
         AStarNode node = this.getGrid()[x][y];
         if (node.isWalkable()) {
-          Game.getRenderEngine().renderShape(g, new Rectangle2D.Double(node.getLocation().x - 0.25, node.getLocation().y - 0.25, 0.5, 0.5));
+          Game.graphics().renderShape(g, new Rectangle2D.Double(node.getLocation().x - 0.25, node.getLocation().y - 0.25, 0.5, 0.5));
         } else {
-          Game.getRenderEngine().renderShape(g, node.getBounds());
+          Game.graphics().renderShape(g, node.getBounds());
         }
       }
     }
@@ -172,18 +172,18 @@ public class AStarGrid implements IRenderable {
    */
   public void updateWalkable(final Rectangle2D rectangle) {
     for (final AStarNode node : this.getIntersectedNodes(rectangle)) {
-      node.setWalkable(!Game.getPhysicsEngine().collides(node.getBounds(), CollisionType.STATIC));
+      node.setWalkable(!Game.physics().collides(node.getBounds(), CollisionType.STATIC));
     }
   }
 
   protected void assignPenalty(AStarNode node) {
-    if (!Game.getPhysicsEngine().collides(node.getLocation(), CollisionType.ENTITY)) {
+    if (!Game.physics().collides(node.getLocation(), CollisionType.ENTITY)) {
       return;
     }
 
     // by default we calculate a penalty for props that cannot be destroyed
     int penalty = 0;
-    for (Prop prop : Game.getEnvironment().getProps()) {
+    for (Prop prop : Game.world().environment().getProps()) {
       if (!prop.hasCollision() || !prop.isIndestructible() || !prop.getBoundingBox().intersects(node.getBounds())) {
         continue;
       }
@@ -226,7 +226,7 @@ public class AStarGrid implements IRenderable {
     for (int x = 0; x < gridSizeX; x++) {
       for (int y = 0; y < gridSizeY; y++) {
         final Rectangle nodeBounds = new Rectangle(x * this.nodeSize, y * this.nodeSize, this.nodeSize, this.nodeSize);
-        final AStarNode node = new AStarNode(!Game.getPhysicsEngine().collides(nodeBounds, CollisionType.STATIC), nodeBounds, x, y);
+        final AStarNode node = new AStarNode(!Game.physics().collides(nodeBounds, CollisionType.STATIC), nodeBounds, x, y);
         this.assignPenalty(node);
         this.getGrid()[x][y] = node;
       }

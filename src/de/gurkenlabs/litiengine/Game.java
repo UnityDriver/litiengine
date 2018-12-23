@@ -1,10 +1,8 @@
 package de.gurkenlabs.litiengine;
 
 import java.awt.event.KeyEvent;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -12,18 +10,31 @@ import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
+import javax.xml.bind.JAXBException;
+
+import de.gurkenlabs.litiengine.configuration.ClientConfiguration;
+import de.gurkenlabs.litiengine.configuration.DebugConfiguration;
 import de.gurkenlabs.litiengine.configuration.GameConfiguration;
+import de.gurkenlabs.litiengine.configuration.GraphicConfiguration;
+import de.gurkenlabs.litiengine.configuration.InputConfiguration;
+import de.gurkenlabs.litiengine.configuration.SoundConfiguration;
+import de.gurkenlabs.litiengine.entities.ICollisionEntity;
+import de.gurkenlabs.litiengine.entities.IMobileEntity;
+import de.gurkenlabs.litiengine.environment.Environment;
 import de.gurkenlabs.litiengine.environment.EnvironmentLoadedListener;
-import de.gurkenlabs.litiengine.environment.IEnvironment;
+import de.gurkenlabs.litiengine.environment.GameWorld;
 import de.gurkenlabs.litiengine.environment.tilemap.ICustomPropertyProvider;
-import de.gurkenlabs.litiengine.environment.tilemap.IMap;
-import de.gurkenlabs.litiengine.environment.tilemap.ITileset;
 import de.gurkenlabs.litiengine.graphics.Camera;
 import de.gurkenlabs.litiengine.graphics.DebugRenderer;
-import de.gurkenlabs.litiengine.graphics.ICamera;
+import de.gurkenlabs.litiengine.graphics.GameWindow;
+import de.gurkenlabs.litiengine.graphics.ImageRenderer;
+import de.gurkenlabs.litiengine.graphics.RenderComponent;
 import de.gurkenlabs.litiengine.graphics.RenderEngine;
-import de.gurkenlabs.litiengine.graphics.Spritesheet;
+import de.gurkenlabs.litiengine.graphics.ShapeRenderer;
+import de.gurkenlabs.litiengine.graphics.TextRenderer;
+import de.gurkenlabs.litiengine.gui.GuiComponent;
 import de.gurkenlabs.litiengine.gui.screens.IScreenManager;
+import de.gurkenlabs.litiengine.gui.screens.Screen;
 import de.gurkenlabs.litiengine.gui.screens.ScreenManager;
 import de.gurkenlabs.litiengine.input.Input;
 import de.gurkenlabs.litiengine.input.Input.InputGameAdapter;
@@ -31,6 +42,8 @@ import de.gurkenlabs.litiengine.physics.IPhysicsEngine;
 import de.gurkenlabs.litiengine.physics.PhysicsEngine;
 import de.gurkenlabs.litiengine.resources.Resources;
 import de.gurkenlabs.litiengine.sound.ISoundEngine;
+import de.gurkenlabs.litiengine.sound.ISoundPlayback;
+import de.gurkenlabs.litiengine.sound.Sound;
 import de.gurkenlabs.litiengine.sound.SoundEngine;
 import de.gurkenlabs.litiengine.util.ArrayUtilities;
 import de.gurkenlabs.litiengine.util.io.XmlUtilities;
@@ -65,53 +78,49 @@ public final class Game {
   public static final String COMMADLINE_ARG_RELEASE = "-release";
   public static final String COMMADLINE_ARG_NOGUI = "-nogui";
 
-  protected static long environmentLoadTick;
   private static final Logger log = Logger.getLogger(Game.class.getName());
   private static final String LOGGING_CONFIG_FILE = "logging.properties";
 
   private static boolean debug = true;
   private static boolean noGUIMode = false;
-  private static final List<EnvironmentLoadedListener> environmentLoadedListeners;
   private static final List<GameListener> gameListeners;
   private static final List<GameTerminatedListener> gameTerminatedListeners;
 
-  private static final GameConfiguration configuration;
   private static final RenderEngine graphicsEngine;
   private static final SoundEngine soundEngine;
   private static final IPhysicsEngine physicsEngine;
 
-  private static final List<ITileset> tilesets;
+  private static final GameConfiguration configuration;
   private static final GameMetrics metrics;
-
   private static final GameTime gameTime;
-
   private static GameInfo gameInfo;
-  private static IEnvironment environment;
-  private static ICamera camera;
+
   private static GameLoop gameLoop;
   private static RenderLoop renderLoop;
-  private static IScreenManager screenManager;
+
+  private static ScreenManager screenManager;
+  private static GameWorld world;
 
   private static boolean hasStarted;
   private static boolean initialized;
 
   static {
-    environmentLoadedListeners = new CopyOnWriteArrayList<>();
     gameListeners = new CopyOnWriteArrayList<>();
     gameTerminatedListeners = new CopyOnWriteArrayList<>();
 
     graphicsEngine = new RenderEngine();
     physicsEngine = new PhysicsEngine();
     soundEngine = new SoundEngine();
+
     metrics = new GameMetrics();
     gameInfo = new GameInfo();
-
-    tilesets = new CopyOnWriteArrayList<>();
     gameTime = new GameTime();
 
     // init configuration before init method in order to use configured values
     // to initialize components
     configuration = new GameConfiguration();
+    world = new GameWorld();
+    world.addLoadedListener(gameTime);
 
     addGameListener(new InputGameAdapter());
   }
@@ -138,14 +147,6 @@ public final class Game {
     gameTerminatedListeners.remove(listener);
   }
 
-  public static void addEnvironmentLoadedListener(EnvironmentLoadedListener listener) {
-    environmentLoadedListeners.add(listener);
-  }
-
-  public static void removeEnvironmentLoadedListener(EnvironmentLoadedListener listener) {
-    environmentLoadedListeners.remove(listener);
-  }
-
   /**
    * This flag indicates if the game currently supports debugging. This should
    * be set to false for release builds.
@@ -161,18 +162,33 @@ public final class Game {
   }
 
   /**
-   * This flag indicates whether the game should display the {@link ScreenManager} or not.
-   * This can only be set before the game has been initialized with the {@link #init(String...)} method. Afterwards it doesn't have an effect anymore.
-   * If set to true, the {@link ScreenManager#setVisible(boolean)} method won't be set to true and the {@link RenderLoop} won't be started.
-   * Also the {@link Camera} won't be updated.
+   * This flag indicates whether the game should display the <code>GameWindow</code> or not.
+   * This can only be set before the game has been initialized with the <code>Game.init(String...)</code> method. Afterwards it doesn't have an effect
+   * anymore.
+   * If enabled, the <code>ScreenManager#setVisible(boolean)</code> method won't be set to true and the <code>RenderLoop</code> won't be started.
+   * Also the <code>Camera</code> won't be updated.
    * 
    * @param noGui
    *          If set to true, the GUI will be hidden.
+   * @see GameWindow
+   * @see Game#init(String...)
+   * @see ScreenManager#setVisible(boolean)
+   * @see RenderLoop
+   * @see Camera
    */
   public static void hideGUI(boolean noGui) {
     noGUIMode = noGui;
   }
 
+  /**
+   * This flag globally controls the game's debugging state. If enabled, debugging functionality (e.g. rendering collision boxes)
+   * can potentially be enabled in the configuration.
+   * 
+   * @return True if debugging functionality is enabled; otherwise false.
+   * 
+   * @see Game#allowDebug(boolean)
+   * @see GameConfiguration#debug()
+   */
   public static boolean isDebug() {
     return debug;
   }
@@ -181,20 +197,12 @@ public final class Game {
     return noGUIMode;
   }
 
-  public static GameConfiguration getConfiguration() {
-    return configuration;
-  }
-
-  public static IEnvironment getEnvironment() {
-    return environment;
-  }
-
   /**
-   * Gets the basic meta information about this game.<br>
-   * This instance can be used to define meta information about your game, like it's name, version or web site.<br>
+   * Gets the static meta information about this game.<br>
+   * This can be used to define meta information about your game, like it's name, version or web site.<br>
    * <br>
-   * <i>It's also possible to provide additional custom information using the method group of
-   * <code>GameInfo.setValue("CUSTOM_STRING", "my-value")</code>.</i>
+   * <i>It's also possible to provide additional custom information using the method group <br>
+   * <code>Game.getInfo().setValue("CUSTOM_STRING", "my-value")</code>.</i>
    * 
    * @return The game's basic meta information.
    * 
@@ -203,48 +211,226 @@ public final class Game {
    * @see GameInfo#setName(String)
    * @see GameInfo#setValue(String, String)
    */
-  public static GameInfo getInfo() {
+  public static GameInfo info() {
     return gameInfo;
   }
 
-  public static IGameLoop getLoop() {
-    return gameLoop;
+  /**
+   * Gets the game's runtime configuration.<br>
+   * It contains default engine settings for the game client, graphics, audio, input and debugging.<br>
+   * Additionally, it can be used to register and manage custom settings that are specific to your game.
+   * <p>
+   * <i>
+   * Elements of this configuration are also presented in a config.properties file in the game's root directory. <br>
+   * This way its possible to adjust elements without having to recompile the game.
+   * </i>
+   * </p>
+   * 
+   * @return The game's runtime configuration.
+   * 
+   * @see SoundConfiguration
+   * @see GraphicConfiguration
+   * @see ClientConfiguration
+   * @see DebugConfiguration
+   * @see InputConfiguration
+   */
+  public static GameConfiguration config() {
+    return configuration;
   }
 
-  public static List<ITileset> getTilesets() {
-    return tilesets;
-  }
-
-  public static GameMetrics getMetrics() {
+  /**
+   * Gets basic client metrics about the game's runtime.
+   * This includes information about network, the frames-per-second or the updates-per-second and the used memory.
+   * 
+   * <p>
+   * <i>
+   * This information can be rendered by setting <br>
+   * <code>Game.config().client().setShowGameMetrics(boolean)</code> to true or <br>
+   * <code>cl_showGameMetrics=true</code> in the config.settings.
+   * </i>
+   * </p>
+   * 
+   * @return Metrics about the game's runtime.
+   * 
+   * @see GameMetrics#getFramesPerSecond()
+   * @see ClientConfiguration#setShowGameMetrics(boolean)
+   */
+  public static GameMetrics metrics() {
     return metrics;
   }
 
-  public static IPhysicsEngine getPhysicsEngine() {
-    return physicsEngine;
+  public static GameTime time() {
+    return gameTime;
   }
 
-  public static RenderEngine getRenderEngine() {
-    return graphicsEngine;
-  }
-
-  public static RenderLoop getRenderLoop() {
-    return renderLoop;
-  }
-
-  public static IScreenManager getScreenManager() {
+  /**
+   * Gets the game's window in which the <code>RenderComponent</code> lives.<br>
+   * This class e.g. provides the possibility to set a title, provide an icon or get information about the resolution.
+   * 
+   * @return The window that hosts the game's <code>RenderComponent</code>.
+   * 
+   * @see RenderComponent
+   * @see GameWindow#getResolution()
+   * @see GameWindow#setTitle(String)
+   * @see GameWindow#setIconImage(java.awt.Image)
+   */
+  public static GameWindow window() {
     return screenManager;
   }
 
-  public static ISoundEngine getSoundEngine() {
+  /**
+   * Gets the engine's <code>SoundEngine</code> component that can be used to play sounds and music.<br>
+   * Sound can be loaded and accessed using the <code>Resources</code> API and are managed by the<br>
+   * <code>Resources.sounds()</code> resource container.
+   * 
+   * <p>
+   * <i>
+   * Upon playing a sound, the engine returns an <code>ISoundPlayback</code> instance that can then be used to further control the audio line.
+   * </i>
+   * </p>
+   * 
+   * @return The engine's <code>SoundEngine</code> component.
+   * 
+   * @see Sound
+   * @see Resources#sounds()
+   * @see ISoundPlayback
+   * @see ISoundEngine#playSound(de.gurkenlabs.litiengine.sound.Sound)
+   * @see ISoundEngine#playMusic(de.gurkenlabs.litiengine.sound.Sound)
+   */
+  public static ISoundEngine audio() {
     return soundEngine;
   }
 
-  public static ICamera getCamera() {
-    return camera;
+  /**
+   * Gets the engine's <code>PhysicsEngine</code> component that can be used to detect and resolve collision and move entities with respect to all
+   * collision
+   * entities on the environment.<br>
+   * The boundaries of the loaded environment also pose a "non-walkable" area that will be taken into account when moving entities with this engine.
+   * 
+   * <p>
+   * <i>It is also possible to manually register static collision <code>Rectangles</code> that can further restrict the game world.</i>
+   * </p>
+   * 
+   * @return The engine's <code>PhysicsEngine</code> component.
+   * 
+   * @see PhysicsEngine
+   * @see PhysicsEngine#move(IMobileEntity, float)
+   * @see ICollisionEntity
+   */
+  public static IPhysicsEngine physics() {
+    return physicsEngine;
   }
 
-  public static GameTime getTime() {
-    return gameTime;
+  /**
+   * Gets the engine's <code>RenderEngine</code> component that is used to render <code>Images, Shapes or Text</code> with respect to the environment
+   * and the render scale and the <code>Camera</code>.
+   * 
+   * <p>
+   * <i>In case you want to render something in a static manner that is unrelated to the environment, you can use the engine's different static
+   * <code>Renderer</code> implementations.</i>
+   * </p>
+   * 
+   * @return The engine's <code>RenderEngine</code> component.
+   * 
+   * @see RenderEngine#getBaseRenderScale()
+   * @see TextRenderer
+   * @see ShapeRenderer
+   * @see ImageRenderer
+   */
+  public static RenderEngine graphics() {
+    return graphicsEngine;
+  }
+
+  /**
+   * Gets the game's main loop that is used to execute and manage all game logic apart from rendering and input processing.<br>
+   * You can attach any <code>Updatable</code> instance to this loop if you want to execute custom game logic that is executed at the configured
+   * updaterate.
+   * 
+   * <p>
+   * <i>The LITIengine has separate loops for game logic, rendering and input processing. <br>
+   * This prevents them from interfering with each other and also properly separates tasks by their category.</i>
+   * </p>
+   * 
+   * 
+   * @return The game's main loop.
+   *
+   * @see ClientConfiguration#getUpdaterate()
+   * @see IUpdateable
+   * @see ILoop#attach(IUpdateable)
+   * @see ILoop#detach(IUpdateable)
+   * @see Input#getLoop()
+   * @see Game#renderLoop()
+   */
+  public static IGameLoop loop() {
+    return gameLoop;
+  }
+
+  /**
+   * Gets the game's loop that executes the rendering process on the GameFrame's <code>RenderComponent</code>.<br>
+   * This internally renders the currently active screen which passes the <code>Graphics2D</code> object to all <code>GuiComponents</code> and the
+   * Environment for rendering. This loop will try to execute at the configured frames-per-second and limit the frames to this value.
+   * 
+   * <p>
+   * <i>It's also possible to register <code>Updatable</code> instances to this loop which is useful if you want to execute something that is directly
+   * related to
+   * the rendering process and needs to be executed right before the game's rendering starts.</i>
+   * </p>
+   * 
+   * @return The game's render loop.
+   * 
+   * @see ClientConfiguration#getMaxFps()
+   * @see RenderComponent#render()
+   * @see Screen#render(java.awt.Graphics2D)
+   * @see GuiComponent#render(java.awt.Graphics2D)
+   * @see Environment#render(java.awt.Graphics2D)
+   */
+  public static RenderLoop renderLoop() {
+    return renderLoop;
+  }
+
+  /**
+   * Gets the game's <code>ScreenManager</code> that is responsible for organizing all <code>Screens</code> of your game and providing the currently
+   * active <code>Screen</code> that is used to render the current <code>Environment</code>.<br>
+   * Screens are the containers that allow you to organize the visible contents of your game and are identified and addressed by a unique name.
+   * 
+   * <p>
+   * <i>Examples: Menu Screen, Credits Screen, Game Screen, Inventory Screen</i>
+   * </p>
+   * 
+   * @return The game's screen manager.
+   * 
+   * @see Screen
+   * @see GameWorld#environment()
+   * @see Game#world()
+   */
+  public static IScreenManager screens() {
+    return screenManager;
+  }
+
+  /**
+   * Gets the game's world which is a global environment manager that contains all <code>Environments</code>
+   * and provides the currently active <code>Environment</code> and
+   * <code>Camera</code>.<br>
+   * <p>
+   * The <code>GameWorld</code> returns the same instance for a particular map/mapName until the
+   * <code>GameWorld.reset(String)</code> method is called.
+   * </p>
+   * 
+   * Moreover, it provides the possibility to attach game logic via <code>EnvironmentListeners</code> to different events of the
+   * <code>Envrionment's</code> life cycle (e.g. loaded, initialized, ...).<br>
+   * <i>This is typically used to provide some per-level logic or to trigger
+   * general loading behavior.</i>
+   * 
+   * @return The game's environment manager.
+   * 
+   * @see GameWorld
+   * @see Environment
+   * @see Camera
+   * @see GameWorld#environment()
+   * @see GameWorld#camera()
+   */
+  public static GameWorld world() {
+    return world;
   }
 
   public static boolean hasStarted() {
@@ -270,7 +456,7 @@ public final class Game {
    * @param args
    *          The arguments passed to the programs entry point.
    */
-  public static void init(String... args) {
+  public static synchronized void init(String... args) {
     if (initialized) {
       log.log(Level.INFO, "The game has already been initialized.");
       return;
@@ -278,13 +464,15 @@ public final class Game {
 
     handleCommandLineArguments(args);
 
-    getConfiguration().load();
-    Locale.setDefault(new Locale(getConfiguration().client().getCountry(), getConfiguration().client().getLanguage()));
+    config().load();
+    Locale.setDefault(new Locale(config().client().getCountry(), config().client().getLanguage()));
 
-    gameLoop = new GameLoop("Main Update Loop", getConfiguration().client().getUpdaterate());
-    gameLoop.attach(getPhysicsEngine());
+    gameLoop = new GameLoop("Main Update Loop", config().client().getUpdaterate());
+    gameLoop.attach(physics());
+    gameLoop.attach(metrics());
+    gameLoop.attach(world());
 
-    final ScreenManager scrMgr = new ScreenManager(getInfo().getTitle());
+    final ScreenManager scrMgr = new ScreenManager(info().getTitle());
 
     // setup default exception handling for render and update loop
     renderLoop = new RenderLoop("Render Loop");
@@ -293,9 +481,9 @@ public final class Game {
 
     screenManager = scrMgr;
 
-    // init screens
-    getScreenManager().init(getConfiguration().graphics().getResolutionWidth(), getConfiguration().graphics().getResolutionHeight(), getConfiguration().graphics().isFullscreen());
-    setCamera(new Camera());
+    // initialize  the game window
+    window().init();
+    world.setCamera(new Camera());
 
     // init logging
     if (new File(LOGGING_CONFIG_FILE).exists()) {
@@ -313,23 +501,23 @@ public final class Game {
     }
 
     if (!isInNoGUIMode()) {
-      if (getConfiguration().client().showGameMetrics()) {
-        getScreenManager().getRenderComponent().onRendered(g -> getMetrics().render(g));
+      if (config().client().showGameMetrics()) {
+        window().getRenderComponent().onRendered(g -> metrics().render(g));
       }
 
-      if (getConfiguration().debug().isDebugEnabled()) {
-        getRenderEngine().onEntityRendered(e -> DebugRenderer.renderEntityDebugInfo(e.getGraphics(), e.getRenderedObject()));
+      if (config().debug().isDebugEnabled()) {
+        graphics().onEntityRendered(e -> DebugRenderer.renderEntityDebugInfo(e.getGraphics(), e.getRenderedObject()));
       }
 
-      getScreenManager().getRenderComponent().onFpsChanged(fps -> getMetrics().setFramesPerSecond(fps));
-      getScreenManager().setIconImage(Resources.images().get("litiengine-icon.png"));
+      window().getRenderComponent().onFpsChanged(fps -> metrics().setFramesPerSecond(fps));
+      window().setIconImage(Resources.images().get("litiengine-icon.png"));
 
       // init mouse inputs
-      getScreenManager().getRenderComponent().addMouseListener(Input.mouse());
-      getScreenManager().getRenderComponent().addMouseMotionListener(Input.mouse());
-      getScreenManager().getRenderComponent().addMouseWheelListener(Input.mouse());
+      window().getRenderComponent().addMouseListener(Input.mouse());
+      window().getRenderComponent().addMouseMotionListener(Input.mouse());
+      window().getRenderComponent().addMouseWheelListener(Input.mouse());
 
-      Input.keyboard().onKeyTyped(KeyEvent.VK_PRINTSCREEN, key -> getScreenManager().getRenderComponent().takeScreenshot());
+      Input.keyboard().onKeyTyped(KeyEvent.VK_PRINTSCREEN, key -> window().getRenderComponent().takeScreenshot());
     }
 
     Runtime.getRuntime().addShutdownHook(new Thread(Game::terminate, "Shutdown"));
@@ -343,78 +531,6 @@ public final class Game {
     Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler);
   }
 
-  /**
-   * Load Spritesheets, Tilesets and Maps from a game resource file created with the utiLITI editor.
-   * 
-   * @param gameResourceFile
-   *          the file name of the game resource file
-   */
-  public static void load(final String gameResourceFile) {
-    final GameData file = GameData.load(gameResourceFile);
-    if (file == null) {
-      return;
-    }
-
-    int mapCnt = 0;
-    for (final IMap m : file.getMaps()) {
-      Resources.maps().add(m.getName(), m);
-      mapCnt++;
-    }
-
-    log.log(Level.INFO, "{0} maps loaded from {1}", new Object[] { mapCnt, gameResourceFile });
-
-    int tileCnt = 0;
-    for (final ITileset tileset : file.getTilesets()) {
-      if (getTilesets().stream().anyMatch(x -> x.getName().equals(tileset.getName()))) {
-        continue;
-      }
-
-      getTilesets().add(tileset);
-      tileCnt++;
-    }
-
-    log.log(Level.INFO, "{0} tilesets loaded from {1}", new Object[] { tileCnt, gameResourceFile });
-
-    final List<Spritesheet> loadedSprites = new ArrayList<>();
-    for (final SpritesheetInfo tileset : file.getSpriteSheets()) {
-      final Spritesheet sprite = Resources.spritesheets().load(tileset);
-      loadedSprites.add(sprite);
-    }
-
-    log.log(Level.INFO, "{0} spritesheets loaded from {1}", new Object[] { loadedSprites.size(), gameResourceFile });
-
-    int spriteload = 0;
-    for (final Spritesheet s : loadedSprites) {
-      for (int i = 0; i < s.getRows() * s.getColumns(); i++) {
-        BufferedImage sprite = s.getSprite(i);
-        if (sprite != null) {
-          spriteload++;
-        }
-      }
-    }
-
-    log.log(Level.INFO, "{0} sprites loaded to memory", new Object[] { spriteload });
-  }
-
-  public static void loadEnvironment(final IEnvironment env) {
-    if (getEnvironment() != null) {
-      getEnvironment().unload();
-    }
-
-    environment = env;
-    if (getEnvironment() != null) {
-      getEnvironment().load();
-    }
-
-    for (final EnvironmentLoadedListener listener : environmentLoadedListeners) {
-      listener.environmentLoaded(getEnvironment());
-    }
-
-    if (getLoop() != null) {
-      environmentLoadTick = getLoop().getTicks();
-    }
-  }
-
   /***
    * <p>
    * Starts the <code>GameLoops</code> and other components.
@@ -426,12 +542,12 @@ public final class Game {
    * When the <code>Game</code> has started up successfully, it'll callback to the registered <code>GameListeners</code>.
    * </p>
    * 
-   * @see ScreenManager#getCurrentScreen()
+   * @see ScreenManager#current()
    * @see SoundEngine
    * @see Input
    * @see GameListener#started()
    */
-  public static void start() {
+  public static synchronized void start() {
     if (!initialized) {
       throw new IllegalStateException("The game cannot be started without being first initialized. Call Game.init(...) before Game.start().");
     }
@@ -451,17 +567,23 @@ public final class Game {
     hasStarted = true;
   }
 
-  private static void terminate() {
+  /**
+   * This method <b>should not be called manually</b>. <br>
+   * It's internally called when the main application shuts down.
+   */
+  public static synchronized void terminate() {
     for (final GameListener listener : gameListeners) {
       if (!listener.terminating()) {
         return;
       }
     }
 
-    getConfiguration().save();
+    config().save();
     gameLoop.terminate();
 
     soundEngine.terminate();
+
+    world().clear();
     if (!isInNoGUIMode()) {
       renderLoop.terminate();
     }
@@ -474,32 +596,19 @@ public final class Game {
     initialized = false;
   }
 
-  public static void setCamera(final ICamera cam) {
-    if (getCamera() != null) {
-      Game.getLoop().detach(camera);
-    }
-
-    camera = cam;
-
-    if (!isInNoGUIMode()) {
-      Game.getLoop().attach(cam);
-      getCamera().updateFocus();
-    }
-  }
-
   /**
    * Sets the <code>Game's</code> basic information by the specified <code>GameInfo</code> instance.
    * <p>
    * <i>Typically, this should not be called manually because the <code>Game</code> already provides a <code>GameInfo</code> object which can be
    * adjusted.<br>
-   * If you just want to edit some of it's information, use the provided instance of {@link Game#getInfo()}.
+   * If you just want to edit some of it's information, use the provided instance of {@link Game#info()}.
    * </i>
    * </p>
    * 
    * @param info
    *          The <code>GameInfo</code> that contains the basic information for the game.
    * 
-   * @see Game#getInfo()
+   * @see Game#info()
    * @see GameInfo
    */
   public static void setInfo(final GameInfo info) {
@@ -513,13 +622,17 @@ public final class Game {
    *          The path to the XML file that contains the serialized <code>GameInfo</code>.
    * 
    * @see Game#setInfo(GameInfo)
-   * @see Game#getInfo()
+   * @see Game#info()
    * @see GameInfo
    */
   public static void setInfo(final String gameInfoFile) {
-    GameInfo info = XmlUtilities.readFromFile(GameInfo.class, gameInfoFile);
-    if (info == null) {
+    GameInfo info;
+    try {
+      info = XmlUtilities.readFromFile(GameInfo.class, gameInfoFile);
+    } catch (JAXBException e) {
       log.log(Level.WARNING, "Could not read game info from {0}", new Object[] { gameInfoFile });
+      setInfo((GameInfo) null);
+      return;
     }
 
     setInfo(info);

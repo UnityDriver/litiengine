@@ -6,12 +6,12 @@
     * [The utiLITI editor](creating-a-project/utiliti-editor.md)
 
 * [Setting up the basics](basic-setup/README.md)
-    * [The Game class](basic-setup/game-class.md)
+    * [The Game API](basic-setup/game-class.md)
     * The Game Loop
     * Creating screens
 
 * [Managing resources](managing-resources/README.md)
-    * The Resources API
+    * [The Resources API](managing-resources/resources-api.md)
     * Sounds
     * Images
     * Fonts
@@ -37,7 +37,7 @@
     * Loading external maps
 
 * [Controlling entities](controlling-entities/README.md)
-    * Player Input
+    * [The Input API](controlling-entities/input.md)
     * Animation
     * Movement and behaviours
     * The messaging system
